@@ -1,0 +1,188 @@
+- in this we will render our location messages 
+- instead of showing url, we may show link
+
+- for this we are gonna have a separate template and separate event for location 
+- as we need to implement separate logic for this functionality
+
+
+Challenge : Create separate event for location sharing message
+1. server emit "locationMessage" with url
+2. client listen for "locationMessage" and print url to console
+
+
+
+***********index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg','Welcome!')
+    socket.broadcast.emit('serverMsg','A new user has joined!')
+
+    socket.on('clientMsg',(msg,callback)=>{
+        const filter= new Filter()
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.emit('serverMsg',msg)
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg', 'A user has left!')
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        io.emit('locationMessage', `https://google.com/maps?q=${location.latitude},${location.longitude}`)
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+**********chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        message:message
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (url)=>{
+    console.log(url)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        location_url:url
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+
+
+***************index.html
+
+
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+
+        <div id="messages"></div>
+
+        <form id="msgForm" >
+            <input type="text" name="msgInput" placeholder="Message" >
+            <button >Submit</button>
+        </form>
+        <button id="send-location">Send location</button>
+
+        <!-- type signifies what content is there inside the scripts -->
+        <script id="message-template" type="text/html"> 
+            <div>
+                <p>{{message}}</p>
+            </div>
+        </script>
+
+        <script id="location-message-template" type="text/html"> 
+            <div>
+                <a href="{{location_url}}" target="_blank">My Current Location</a>
+            </div>
+        </script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/3.0.1/mustache.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qs/6.6.0/qs.min.js"></script>
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+        <script src="/js/chat.js"></script>
+    </body>
+</html>

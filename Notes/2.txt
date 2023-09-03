@@ -1,0 +1,65 @@
+**************************************************************2
+
+- challenge : intialize npm and install Express
+              setup express server
+                serve the public directory
+                listen on port 3000
+              create index.html and render "Chat App" to the screen
+
+solutions
+- npm init
+- npm i express
+- establishing server
+- import express and path
+- writing code for publicDirectoryPath to join and then using app.use
+- them listening to the port using app.listen
+- then we will create a public folder inside chat-app and inside public folder will create index.html
+
+- then turning server on by command: node src/index.js
+- and then on browser : localhost:3000
+
+
+- Challenge 2: setup scripts
+               create start scripts
+               install nodemon as dev dependency
+               create dev script to start the server using nodemon
+
+
+solutions
+-     "start": "node src/index.js",          --> in package.json
+-      "dev": "nodemon src/index.js"
+- npm install nodemon --save-dev      --> in chat-app
+
+
+
+
+********************index.js
+
+const express = require('express')
+const path =require('path')
+
+const app =express()
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+app.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+****************index.html
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+    </body>
+</html>

@@ -1,0 +1,96 @@
+- in this we will integrate styles to the app
+
+- first we will grab css and img from drive and place it in public folder
+
+- we will do work in index.html
+1. first we set title, then link favicon, then stylesheet
+
+NOTE: style.min.css is not human readable and works slightly fast than style.css
+
+2. created two divs. one for sidebar and one for chat main content
+   moved the button and forms to the chat main content
+
+3. wrapped form in div with class compose
+
+4. also did modification in message-template. same modification done in location-message-template
+
+
+*****index.html
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>Chatgram</title>
+    <link rel="icon" href="/img/logo.png">
+    <link rel="stylesheet" href="/css/styles.min.css">
+
+</head>
+
+<body>
+
+    <div class="chat">
+        <div class="chat__sidebar">
+
+        </div>
+        <div class="chat__main">
+
+            <div id="messages" class="chat__messages"></div>
+
+            <div class="compose">
+                <form id="msgForm">
+                    <input type="text" name="msgInput" placeholder="Message">
+                    <button>Send</button>
+                </form>
+                <button id="send-location">Send location</button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script id="message-template" type="text/html">
+            <div class="message">
+                <p>
+                    <span class="message__name">Some User Name</span>
+                    <span class="message__meta">{{createdAt}}</span>
+                </p>
+                <p>{{message}}</p>
+            </div>
+        </script>
+
+    <script id="location-message-template" type="text/html">
+            <div class="message">
+                <p>
+                    <span class="message__name">Some User Name</span>
+                    <span class="message__meta">{{createdAt}}</span>
+                </p>
+                
+                <p><a href="{{location_url}}" target="_blank">My Current Location</a></p>
+            </div>
+        </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/3.0.1/mustache.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qs/6.6.0/qs.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+    <script src="/js/chat.js"></script>
+</body>
+
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

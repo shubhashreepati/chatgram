@@ -1,0 +1,221 @@
+- in this we will integrate the function we created in prev video in src-> utils->user.js
+- we will integrate them in index.js
+
+- also will include following functionality
+1. so that they emit messages to the correct chat room
+2. also include user's username along with their messages, so we can render those to screen as well
+
+- we will load functions from user.js in index.js
+
+- where there is socket.join we will user addUser
+- we do not know how to get id
+  1. we can get that using socket.id which gives unique identifier for that particular connection
+  2. now the id is in parent scope for all of our event listener
+
+- when implementing addUser we will get the error object or user object (which we gather using destructuring property)
+  1. if error occurs, we convey the client through the callback function. so in chat.js we implemented callback for socket.join
+  2. also from addUser we get cleaned data returned and that data we should use for making room and username
+  3. and call callback() if everything goes well
+
+
+- we also implement removeUser in socket.on disconnect (ie when user left)
+  1. removeUser will return the user object removed
+  2. it is also possible that the user was not in users array, means the user is not part of any
+     room . so the msg "a user has left" should not be shown. so it is shown only if user was present
+     in user's array
+  3. here also as a modification we user io.to(user.room).emit to emit message in corresponding
+     room only and use of user.room and user.username
+
+- at last we will add something in callback function of socket.emit join
+  1. we will usr alert to show the error
+  2. and will manipulate location property using location.href and will direct it to root of our site ie join page using '/'
+
+
+
+
+**************index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+const {generateMessage} = require('./utils/messages')
+const {generateLocationMessage} = require('./utils/messages')
+const {addUser, removeUser, getUser, getUsersInRoom} = require('./utils/users')
+const { SocketAddress } = require('net')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.on('join', ({username,room}, callback)=>{
+
+        const {error,user} = addUser({id:socket.id , username, room})
+
+        if(error){
+            return callback(error)
+        }
+       
+        socket.join(user.room)
+
+        socket.emit('serverMsg',generateMessage('Welcome!'))
+        socket.broadcast.to(user.room).emit('serverMsg',generateMessage(`${user.username} has joined!`))
+
+        callback()
+    })
+
+    socket.on('clientMsg',(msg,callback)=>{
+        const filter= new Filter()
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.emit('serverMsg',generateMessage(msg))
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        const user=removeUser(socket.id)
+
+        if(user){
+
+            io.to(user.room).emit('serverMsg',generateMessage(`${user.username} has left!`))
+        }
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        io.emit('locationMessage',  generateLocationMessage(`https://google.com/maps?q=${location.latitude},${location.longitude}`))
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+
+
+**************chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+
+
+// Options
+// const {username,room} = Qs.parse(location.search ,{ignoreQueryprefix: true})
+
+
+function parseQuery(queryString) {
+    var query = {};
+    var pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query
+    
+}
+
+const obj=parseQuery(location.search)
+// console.log(obj)
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (message)=>{
+    console.log(message)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        location_url:message.url,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+socket.emit('join',obj,(error)=>{
+
+    if(error){
+        alert(error)
+        location.href='/'
+    }
+
+})
+
+

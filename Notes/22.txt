@@ -1,0 +1,272 @@
+- in this we will be populating the sidebar of the chat application
+
+1. so we emit to all users in that particular room
+2. the room data and all the users in the room  in socket.on join, as soom as new user connects
+
+1. now when some one disconnects in socket.on disconnect
+2. so again the information that user left needs to be communicated to all users in a room
+
+- now to render it on the screen what we have done above we head to chat.js
+
+- now to actually show the users on the side bar we need to first create the template and
+- then render the template
+
+- to create template in chat.html
+    1. we need to display properties of each user
+    2. we have array of objects
+    3. {{#users}}     --> start of array
+       {{/users}}     --> end of array
+
+       syntax:
+       {{#<name of array>}}
+       {{/<name of array>}}
+
+- we will select the sidebar template in chat.js
+- in chat.js to render the sidebar template in socket.on('roomData')
+- using Mustache.render in implementing above functionality
+
+- in chat.html, we have special div for rendering search bar data and for it we set the id as sidebar
+- and in socket.on('roomData') we select that div to set the innerHTML of that div
+
+
+
+*********index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+const {generateMessage} = require('./utils/messages')
+const {generateLocationMessage} = require('./utils/messages')
+const {addUser, removeUser, getUser, getUsersInRoom} = require('./utils/users')
+const { SocketAddress } = require('net')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.on('join', ({username,room}, callback)=>{
+        
+        const msgUserName='Admin'
+        
+
+        const {error,user} = addUser({id:socket.id , username, room})
+
+        if(error){
+            return callback(error)
+        }
+       
+        socket.join(user.room)
+
+        socket.emit('serverMsg',generateMessage(msgUserName,'Welcome!'))
+        socket.broadcast.to(user.room).emit('serverMsg',generateMessage(msgUserName,`${user.username} has joined!`))
+
+        io.to(user.room).emit('roomData',{
+            room: user.room, 
+            users: getUsersInRoom(user.room)
+        })
+
+        callback()
+    })
+
+    socket.on('clientMsg',(msg,callback)=>{
+
+        const user= getUser(socket.id)
+        const filter= new Filter()
+
+        const msgUserName=user.username
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.to(user.room).emit('serverMsg',generateMessage(msgUserName,msg))
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        const user=removeUser(socket.id)
+        const msgUserName='Admin'
+
+        if(user){
+
+            io.to(user.room).emit('serverMsg',generateMessage(msgUserName,`${user.username} has left!`))
+
+            io.to(user.room).emit('roomData',{
+                room: user.room, 
+                users: getUsersInRoom(user.room)
+            })
+        }
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        const user= getUser(socket.id)
+        io.to(user.room).emit('locationMessage',  generateLocationMessage(user.username,`https://google.com/maps?q=${location.latitude},${location.longitude}`))
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+
+********chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+const sidebarTemplate = document.querySelector('#sidebar-template').innerHTML
+
+
+// Options
+// const {username,room} = Qs.parse(location.search ,{ignoreQueryprefix: true})
+
+
+function parseQuery(queryString) {
+    var query = {};
+    var pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query
+    
+}
+
+const obj=parseQuery(location.search)
+// console.log(obj)
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        username: message.msgUserName,
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (message)=>{
+    console.log(message)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        username: message.username,
+        location_url:message.url,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('roomData', ({room,users})=>{
+     const html =Mustache.render(sidebarTemplate,{
+        room, 
+        users
+     })
+
+     document.querySelector('#sidebar').innerHTML= html
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+socket.emit('join',obj,(error)=>{
+
+    if(error){
+        alert(error)
+        location.href='/'
+    }
+
+})
+
+
+
+*********messages.js
+
+const generateMessage = (msgUserName,text) =>{
+    return {
+        msgUserName,
+        text,
+        createdAt: new Date().getTime()    // it generates miliseconds spent till present , while calculating form midnight 1 JAN 1970
+    }
+}
+
+const generateLocationMessage = (username,url) =>{
+    return {
+        username,
+        url,
+        createdAt: new Date().getTime()
+    }
+}
+
+module.exports ={
+    generateMessage: generateMessage,
+    generateLocationMessage: generateLocationMessage
+}
+

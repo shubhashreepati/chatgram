@@ -1,0 +1,331 @@
+- here we will integrate name with sending messages
+- and send message to correct room
+
+Challenge: send message to correct room
+1. use getUser inside "sendMessage" event handler to get user data
+2. emit message to current room
+3. repeat for "sendLocation
+
+solution:
+just user getUser and then io.to(user.room).emit to keep messages in their corresponding rooms
+
+
+- now we will fix that name should be displayed above the sent messages
+  1. we inlcuded username as another input argument in generateLocationMessage in utils->messages
+  2. and will pass username from index.js 
+  3. then we will include username as attribute in socket.on locationMessage in chat.js
+  4. we also need to change Some user name to {{username}}       in locationMessageTemplate in chat.html
+     --> so by doing this we are sending data from server to client and client is using it.
+
+
+
+Challenge: Render username for text messages
+  1. setup the server to send username to the client
+  2. edit every call to " " to include the username
+  3. using "Admin" for system call like connect/welcome/disconnect
+  4. update client(chat.html ) to render username in template
+
+
+- now we want to  remove autocomplete here
+  1. so in input field of message we will set required and autocomplete to off in chat.html
+
+
+Solution:
+
+1. first in index.js we pass username argument in generateMessage function
+2. then added username as attribute in utils->messages.js
+3. and also added username as attribute in Mustache.render in chat.js
+
+
+
+
+*******index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+const {generateMessage} = require('./utils/messages')
+const {generateLocationMessage} = require('./utils/messages')
+const {addUser, removeUser, getUser, getUsersInRoom} = require('./utils/users')
+const { SocketAddress } = require('net')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.on('join', ({username,room}, callback)=>{
+        
+        const msgUserName='Admin'
+        
+
+        const {error,user} = addUser({id:socket.id , username, room})
+
+        if(error){
+            return callback(error)
+        }
+       
+        socket.join(user.room)
+
+        socket.emit('serverMsg',generateMessage(msgUserName,'Welcome!'))
+        socket.broadcast.to(user.room).emit('serverMsg',generateMessage(msgUserName,`${user.username} has joined!`))
+
+        callback()
+    })
+
+    socket.on('clientMsg',(msg,callback)=>{
+
+        const user= getUser(socket.id)
+        const filter= new Filter()
+
+        const msgUserName=user.username
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.to(user.room).emit('serverMsg',generateMessage(msgUserName,msg))
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        const user=removeUser(socket.id)
+        const msgUserName='Admin'
+
+        if(user){
+
+            io.to(user.room).emit('serverMsg',generateMessage(msgUserName,`${user.username} has left!`))
+        }
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        const user= getUser(socket.id)
+        io.to(user.room).emit('locationMessage',  generateLocationMessage(user.username,`https://google.com/maps?q=${location.latitude},${location.longitude}`))
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+
+
+**********chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+
+
+// Options
+// const {username,room} = Qs.parse(location.search ,{ignoreQueryprefix: true})
+
+
+function parseQuery(queryString) {
+    var query = {};
+    var pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query
+    
+}
+
+const obj=parseQuery(location.search)
+// console.log(obj)
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        username: message.msgUserName,
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (message)=>{
+    console.log(message)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        username: message.username,
+        location_url:message.url,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+socket.emit('join',obj,(error)=>{
+
+    if(error){
+        alert(error)
+        location.href='/'
+    }
+
+})
+
+
+
+*********messages.js
+
+
+const generateMessage = (msgUserName,text) =>{
+    return {
+        msgUserName,
+        text,
+        createdAt: new Date().getTime()    // it generates miliseconds spent till present , while calculating form midnight 1 JAN 1970
+    }
+}
+
+const generateLocationMessage = (username,url) =>{
+    return {
+        username,
+        url,
+        createdAt: new Date().getTime()
+    }
+}
+
+module.exports ={
+    generateMessage: generateMessage,
+    generateLocationMessage: generateLocationMessage
+}
+
+
+
+*************chat.html
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>Chatgram</title>
+    <link rel="icon" href="/img/logo.png">
+    <link rel="stylesheet" href="/css/styles.min.css">
+
+</head>
+
+<body>
+
+    <div class="chat">
+        <div class="chat__sidebar">
+
+        </div>
+        <div class="chat__main">
+
+            <div id="messages" class="chat__messages"></div>
+
+            <div class="compose">
+                <form id="msgForm">
+                    <input type="text" name="msgInput" placeholder="Message" required autocomplete="off">
+                    <button>Send</button>
+                </form>
+                <button id="send-location">Send location</button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script id="message-template" type="text/html">
+            <div class="message">
+                <p>
+                    <span class="message__name">{{username}}</span>
+                    <span class="message__meta">{{createdAt}}</span>
+                </p>
+                <p>{{message}}</p>
+            </div>
+        </script>
+
+    <script id="location-message-template" type="text/html">
+            <div class="message">
+                <p>
+                    <span class="message__name">{{username}}</span>
+                    <span class="message__meta">{{createdAt}}</span>
+                </p>
+                
+                <p><a href="{{location_url}}" target="_blank">My Current Location</a></p>
+            </div>
+        </script>
+        <!-- <script src="https://requirejs.org/docs/release/2.3.5/minified/require.js"></script> -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/3.0.1/mustache.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qs/6.6.0/qs.min.js" integrity="sha512-xtMwyNDxbkVuTsFucXtJaHeZul6+7DNsIy/mbEGAlLryutpflR6I3YxkXdTFWzhKStDPZQ+hIre2ra5eJJXf+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="/socket.io/socket.io.js"></script>
+        
+    <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+    <script src="/js/chat.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,186 @@
+- in this we will integrate automatic scrolling into the chat application
+
+- normally and in our present code as soon as the messages start coming and it will fil the
+- screen space , then for newer messages the user have to scroll down
+
+- in automatic scrolling, the browser will automatically scroll the user to the bottom, and then
+- the user will be able to view the most recent content
+- but if the user is viewing the chat history and if at the time new message comes and screen 
+- get auto scrolled then it will be very frustrating for the user
+- so we will let the browser auto scroll only when the user is viewing most recent content
+- and if the user is viewing chat history then we will not scroll
+
+- now we will implement it in chat.js when we render text message or location message
+- we will write the logic in chat.js
+
+1. const $newMessage= $messages.lastElementChild    // $ used as we are storing an element
+2. to get the computed styles for the element we use getComputedStyles
+3. through the help of getComputedStyles we access marginBottom 
+4. we use parseInt (that takes string and convert it to integer) to extract the value of margin
+5. we add this value of margin to the message offsetHeight
+
+1. visible height is the height of screen that is currently displayed to the user where messages
+2. appear and for a particular moment it will remain fixed
+3. height of message conatainer is the total height of container in which messages are stored
+4. so this it total height starting from the top of page till we scroll at the bottom
+
+1. to know the position ie where we are we use scrollOffset
+2. scrollTop will give the distance between the top of page and top of the scroll bar tip
+3. height of scroll bar is same visibleHeight(offsetHeight)
+4. so adding both of these will give accurate information of where we are
+
+1. in if condition we check that before adding new message was the user at the bottom or not
+2. this is done by subtracting the curernt(with new message) container height by new Message height
+3. if it returs true we will scroll to bottom by setting scrollTop to scrollHeight
+
+
+
+******chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+const sidebarTemplate = document.querySelector('#sidebar-template').innerHTML
+
+
+// Options
+// const {username,room} = Qs.parse(location.search ,{ignoreQueryprefix: true})
+const autoscroll = () =>{
+    // New message element
+    const $newMessage= $messages.lastElementChild
+
+    // Height of new message
+    const newMessageStyles= getComputedStyle($newMessage)
+    const newMessageMargin = parseInt(newMessageStyles.marginBottom)
+    const newMessageHeight=  $newMessage.offsetHeight + newMessageMargin
+
+
+    // Visible Height
+    const visibleHeight = $messages.offsetHeight
+
+    // Height of messages container
+    const containerHeight = $messages.scrollHeight
+
+    // how far have I scrolled
+    const scrollOffset = $messages.scrollTop + visibleHeight
+
+    if(containerHeight-newMessageHeight<= scrollOffset){
+        $messages.scrollTop= $messages.scrollHeight
+    }
+
+    console.log(newMessageStyles)
+
+}
+
+
+function parseQuery(queryString) {
+    var query = {};
+    var pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query
+    
+}
+
+const obj=parseQuery(location.search)
+// console.log(obj)
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        username: message.msgUserName,
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+    autoscroll()
+})
+
+socket.on('locationMessage', (message)=>{
+    console.log(message)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        username: message.username,
+        location_url:message.url,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+    autoscroll()
+})
+
+socket.on('roomData', ({room,users})=>{
+     const html =Mustache.render(sidebarTemplate,{
+        room, 
+        users
+     })
+
+     document.querySelector('#sidebar').innerHTML= html
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+socket.emit('join',obj,(error)=>{
+
+    if(error){
+        alert(error)
+        location.href='/'
+    }
+
+})
+
+
+
+

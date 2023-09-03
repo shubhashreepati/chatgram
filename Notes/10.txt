@@ -1,0 +1,79 @@
+- in this we will expand our acknowledgement knowledge by modifications on buttons 
+
+- we store elements from DOM in const since we don't have to write long sentences again and again
+- will use $ sign, just for convention to show that this constant contains an element from the DOM
+
+1. first we enable and disable the form during the process of message sending
+   1. for this just after preventDefault we will disable the form
+   2. and on the first line of acknowledgement we will enable the form
+   3. setAttribute used to disable. it takes first parameter as which attribute and second parameter 
+      is what value to set for first attribute
+   
+2. now to clear the input after the message has been sent and bring focus back on input we write
+   code just below removeAttribute
+
+
+
+Challenge: Disable the sent location button while location being sent
+1. set the selector at top of file
+2. Disable the button just before getting current location
+3. Enable button in acknowledgement callback
+
+
+
+
+***********chat.js
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+
+socket.on('serverMsg', (msg)=>{
+    console.log('Message received is ', msg)
+})
+
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+

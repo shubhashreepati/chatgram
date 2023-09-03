@@ -1,0 +1,120 @@
+- in this we will build room feature of chat application
+
+- we will implement functions for username and room relationship
+
+- we create a file named as user.js in utils folder
+  1. we will create 4 functions ie 1. addUser 
+                                   2. removeUser
+                                   3. getUser
+                                   4. getUsersInRoom
+
+- addUser functions
+1. will take 3 input arguments id, username, room no
+2. id is associated with individual socket and so every single connection to the server has a 
+   unique id generated for it 
+3. after receiving the data we will clean it ie will trim it and make it lowercase
+4. then we wil check if username or room is empty string or not
+5. then we will look if there is an existing user in the users array 
+6. if there is no discrepancy then we will nake object of user consisting id,username,room and push into the users array
+   and in the end return user
+
+
+
+- removeUser function
+1. we will remove user by searching on the basis of the provided id
+2. we will use array method users.findIndex which will return the index if found and if not found
+   it will return -1
+3. now if index is not equal to 1, then we will use array method users.splice which takes the first
+   argument, that from which index the element is to be removed and second argument is counting from
+   given index how many elements is to be removed
+4. this case when want to remove only 1. the return value of splice function is array, so as we 
+   removed only 1 element we will access it using [0]
+
+
+NOTE: we can use filter also. but filter's efficiency is less as it will search for whole array
+      even if a match is found. but findIndex will stop after matching it first item
+
+
+
+
+**********src->utils->user.js
+
+const users = []
+
+// addUser, removeUser, getUser, getUsersInRoom
+
+const addUser = ({id, username,room})=>{
+
+    // clean the data
+    username= username.trim().toLowerCase()
+    room = room.trim().toLowerCase()
+
+
+    // Validate the data
+    if(!username || !room){
+        return {
+            error: 'Username and room are required!'
+        }
+    }
+
+
+    // Check for existing user
+    const existingUser= users.find((user)=>{
+        return user.room===room && user.username === username
+    })
+    // if match is found, it returns the array item back
+
+
+    // Validate username
+    if(existingUser){
+        return{
+            error: 'Username is in use!'
+        }
+    }
+
+
+    // Store user
+    const user ={id, username, room}
+    users.push(user)
+    return {user}
+
+}
+
+
+
+// to test
+
+addUser({
+    id:3,
+    username: 'surya',
+    room: 'mumbai'
+})
+
+console.log(users)
+
+const res =addUser({
+    id: 4,
+    username: 'cheeku',
+    room: 'delhi'
+})
+
+// console.log(res)
+
+
+const removeUser = (id) =>{
+    const index= users.findIndex((user)=>{
+        return user.id===id
+    })
+
+    if(index!==-1){
+        return users.splice(index,1)[0]
+    }
+}
+
+
+// testing
+
+const rmvUser= removeUser(3)
+
+console.log(rmvUser)
+console.log(users)

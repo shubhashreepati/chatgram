@@ -1,0 +1,102 @@
+- here we want to build a simple count application
+- the server is going to store a single number called the count
+- and it will share the count with all connected clients
+- the client will render that count in the browser and client also has a button to increment the count
+- once the server has the incremented count it will share the new count with all connected clients
+- and all the clients have their data updated
+
+- how to share data from server to the client 
+
+- in index.js in.on an input argument is inserted called socket, which contains the information 
+- about the connection
+
+- when we are working with sockets and transferring data, then we are sending and receiving events
+
+- server uses socket.in to send event to the client. Its first parameter is the name of the event
+- second argument send is to send some data
+- client uses socket.on to receive event from the server. its first parameter is also name of event, but the name of sending and receiving event should match
+- data send by server is received in the callback function
+
+- we will create a button for incrementing the count in index.html
+- after that we use querySelector in chat.js to addEventListener to it to increase count by 1 on click
+- this increment message is sent to server. 
+- in increment msg no data is sent as the increment  notification itself is sufficient for server to increase the count
+- after receiving increment message server increases count by 1 and again emit this to client to give updated value of count
+
+- we will create another client in another window
+- but there the problem is the new client is not notified of changes in count
+- for this socket.emit is replaced by io.emit
+- socket.emit send message to a particular connection and io.emit to all the connections
+
+
+
+************index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+let count=0
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('countUpdated',count)
+
+    socket.on('increment',()=>{
+        count++
+        // socket.emit('countUpdated',count)
+        io.emit('countUpdated',count)
+
+    })
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+************chat.js
+
+
+const socket=io()  // io return value stored in socket
+
+socket.on('countUpdated', (count)=>{
+    console.log('The count has been updated', count)
+})
+
+document.querySelector('#increment').addEventListener('click', () =>{
+    console.log('Clicked')
+    socket.emit('increment')  // msg sent to server to increment the count
+})
+
+
+
+****************index.html
+
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+        <button id="increment">+1</button>
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+        <script src="/js/chat.js"></script>
+    </body>
+</html>

@@ -1,0 +1,52 @@
+- in this we will learn how to broadcast our socket.io events
+- this will lead to two practical features to our chat application
+   1. when a new user joins all other connected user will get notified that a new user has joined chat room
+   2. and when user leaves the chat room, other users will get notified that a user will leave the room
+
+- broadcasting the event means we send the message to all clients except the current client
+- so joining of new user message must be sent to everybody except the new user
+- for this functionality we used socket.broadcast.emit   
+
+- we also want functionality to display when a user has left the room
+- socket.on('disconnect') is used for this. 'disconnect' is a built in event and it should be written as it is
+- then io.emit is used since the current user has disconnected
+
+
+
+*********index.js 
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg','Welcome!')
+    socket.broadcast.emit('serverMsg','A new user has joined!')
+
+    socket.on('clientMsg',(msg)=>{
+        io.emit('serverMsg',msg)
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg', 'A user has left!')
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})

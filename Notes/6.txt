@@ -1,0 +1,97 @@
+Challenge
+1. server emit message when new client connects
+2. send "welcome" as event data
+3. client listen message  and print message to console
+
+
+
+Challenge 2
+1. create a form with an input and button
+2. setup eventlistener for form submission. emit 'clientMsg' the input message as data
+3. server listen to 'clientMsg' and send the message to all connected client
+
+
+- we are extracting value from input by using tag name
+- but if the form has many input fields then it will give wrong results
+- so we use name in input field 
+- in chat.js file we use e.target.elements.msgInput.value to extract the value
+- here e.target is the form and then it selects its elements
+- now the problem will not occur
+
+
+
+
+**********index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg','Welcome!')
+
+    socket.on('clientMsg',(msg)=>{
+        io.emit('serverMsg',msg)
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+*********chat.js
+
+const socket=io()  // io return value stored in socket
+
+socket.on('serverMsg', (msg)=>{
+    console.log('Message received is ', msg)
+})
+
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg)
+})
+
+
+
+
+**********index.html
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+        <form id="msgForm" >
+            <input type="text" name="msgInput" >
+            <button >Submit</button>
+        </form>
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+        <script src="/js/chat.js"></script>
+    </body>
+</html>

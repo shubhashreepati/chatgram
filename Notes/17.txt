@@ -1,0 +1,222 @@
+- currently we are entering info and the we click submit it bring us to chat page with our data 
+  entered visible in url
+
+- so that data is not used at all, in this we will know how to access that data
+
+- query String component in the url can be accessed using js
+  1. like typing location.search gives the query string to us
+  2. we need to parse this data to extract username and room no to send to the server
+  3. this function is done by qs(query string) library
+  4. means qs library will convert the information into an object
+
+- this is useless as we used another method to parse query string
+- parsing procedure is done in chat.js as the url in which query string with info present is of chat.js page
+  1. Qs.parse takes 2 arguments
+  2. first is location.search
+  3. second is optional argument. if this was not included then we will have 2 objects named as:
+     ?username and room no.
+    so  ignoreQueryPrefix is made to true, it will not include the ? in username
+
+- we will destructure data from Qs.parse. we get username and room
+
+- we will emit the username and room to server
+- sever also listens and sending data to client
+
+- will work in index.js ie in the server
+- socket.join allows  to join a given chatroom and we provide it our username and rooom no
+- so when we specify room no, all our events will displayed in that particular room 
+- socket.join provide methods to display messages to clients belonging to a specified romm only
+
+- with introduction to rooms new methods of server to client message emitting
+  1. io.to.emit  -- emit an event to everybody in a speciific room
+  2. socket.broadcast.to.emit  -- send msg to chatroom members except a specific client
+
+- we reomove the welcome and new user that was displayed when someone joined on the connection
+- they are moved under join. 
+- after moving the welcome and new user joined command. 
+  1. socket.emit is ok as it emits to the specified user only
+  2. socket.broadcast.emit will not serve our purpose as it emits to all memebers regardless of their
+     room nos except the specific client
+  3. broadcast.to(room).emit will give the message to all members of that particular room except specified client
+
+- like we did above we need for other functions as well. because till now there are many places 
+  where io.emit is present at many places but to change it to io.to(room).emit we need room info
+  so we need to keep track of users and their respective rooms
+
+
+-NOTE: now the qs library that we use in chat.js and has the script tag in chat.html is not working
+       1. so I used a function to parse the query string
+       2. https://stackoverflow.com/questions/2090551/parse-query-string-in-javascript
+       3. taken from above link
+       4. it returns the object with attributes username and room
+
+
+
+
+**********chat.js
+
+
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+
+
+// Options
+// const {username,room} = Qs.parse(location.search ,{ignoreQueryprefix: true})
+
+
+function parseQuery(queryString) {
+    var query = {};
+    var pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query
+    
+}
+
+const obj=parseQuery(location.search)
+// console.log(obj)
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (message)=>{
+    console.log(message)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        location_url:message.url,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+socket.emit('join',obj)
+
+
+
+
+
+
+
+****************index.js
+
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+const {generateMessage} = require('./utils/messages')
+const {generateLocationMessage} = require('./utils/messages')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.on('join', ({username,room})=>{
+       
+        socket.join(room)
+
+        socket.emit('serverMsg',generateMessage('Welcome!'))
+        socket.broadcast.to(room).emit('serverMsg',generateMessage(`${username} has joined!`))
+    })
+
+    socket.on('clientMsg',(msg,callback)=>{
+        const filter= new Filter()
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.emit('serverMsg',generateMessage(msg))
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg',generateMessage('A user has left!'))
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        io.emit('locationMessage',  generateLocationMessage(`https://google.com/maps?q=${location.latitude},${location.longitude}`))
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+

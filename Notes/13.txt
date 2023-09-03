@@ -1,0 +1,184 @@
+- in this we will learn how to intergrate time into the chat application
+- how to generate timestamps, how to transfer b/w client and server and how to format them
+
+const now = new Date()
+it generates data object that represents current point in time
+Some methods related to Date are
+1. now.toString()
+2. now.getDate()
+3. now.getTime()
+
+1. first we are focussing on events that emit messages with name serverMsg. in index.js there are
+   4 instances of these. so to handle this we may create a function oto handle time
+
+2. so here while emiting we have to send as well as the time. So here we will send an object 
+   which will consist of data and time
+   for object creation we will create separate function and in separate file
+   so in src-> utils->messages.js
+   so we import the function and pass text message to it 
+
+3. also we need to change in chat.js , as we are now receiving object
+
+4. implementing function for all other emits
+
+5. we will intergrate timestamp({{createdAt}}) in message-template. also in chat.js we will pass 
+   createdAt value
+
+6. but the time is appearing in a very large number, and it is not feasible for humans
+   so we use momentjs.com library
+   https://momentjs.com/
+   we will use it in when we are passing createdAt value
+   we have already imported moment in index.html few videos back,so we can directly use it
+
+7. whatever is written in .format of moment can be viewed in documentation
+   h for single digit hour mm for double digit minute and a for small letter am and pm
+
+
+
+
+**********index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+const {generateMessage} = require('./utils/messages')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg',generateMessage('Welcome!'))
+    socket.broadcast.emit('serverMsg',generateMessage('A new user has joined!'))
+
+    socket.on('clientMsg',(msg,callback)=>{
+        const filter= new Filter()
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.emit('serverMsg',generateMessage(msg))
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg',generateMessage('A user has left!'))
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        io.emit('locationMessage', `https://google.com/maps?q=${location.latitude},${location.longitude}`)
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+********chat.js
+
+const socket=io()  // io return value stored in socket
+
+// Elements
+const $messageForm= document.querySelector('#msgForm')
+const $messageFormInput= $messageForm.querySelector('input')
+const $messageFormButton = document.querySelector('button')
+const $sendLocationButton = document.querySelector('#send-location')
+const $messages = document.querySelector('#messages')
+
+// Templates
+const messageTemplate =  document.querySelector('#message-template').innerHTML
+const locationMessageTemplate = document.querySelector('#location-message-template').innerHTML
+
+socket.on('serverMsg', (message)=>{
+    console.log('Message received is ', message)
+    
+    const html= Mustache.render(messageTemplate,{
+        message:message.text,
+        createdAt: moment(message.createdAt).format('h:mm a')
+    })
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+socket.on('locationMessage', (url)=>{
+    console.log(url)
+
+    const html= Mustache.render(locationMessageTemplate,{
+        location_url:url
+    })
+
+    $messages.insertAdjacentHTML('beforeend',html)
+})
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    $messageFormButton.setAttribute('disabled', 'disabled')
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        //enable
+        $messageFormButton.removeAttribute('disabled')
+        $messageFormInput.value=''
+        $messageFormInput.focus()
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+$sendLocationButton.addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    // Disable
+    $sendLocationButton.setAttribute('disabled','disabled')
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            $sendLocationButton.removeAttribute('disabled')
+            console.log('Location Shared!')
+        })
+    })
+})
+
+
+
+********messages.js
+
+const generateMessage = (text) =>{
+    return {
+        text,
+        createdAt: new Date().getTime()    // it generates miliseconds spent till present , while calculating form midnight 1 JAN 1970
+    }
+}
+
+
+module.exports ={
+    generateMessage: generateMessage
+}

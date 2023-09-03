@@ -1,0 +1,24 @@
+- to run the app 
+1. first enter into chat-app : cd chat-app
+2. npm run dev 
+3. in browser : localhost:3000
+
+1. git init
+2. create .gitignore file
+3. /node_modules        ---> content of gitignore file
+4. including vercel.json file 
+    1. write any name in vercel.json file
+    2. in src and dest write whatever command we give to start. for this we can go in package.json and whatever command we have in scripts in "start":
+    3. git add . in terminal
+    4. git status
+    5. git commit -m "initial"
+    6. then make new repository in github
+    7. run git remote link
+    8. git push origin master (doing this will upload code on github)
+    9. go to vercel
+    10. go to new project and import the github repository
+    11. leave every detail as it is and deploy
+    12. if done some change in any file then 
+    13. git add .   or git add <file_location_from reference that we are in chat-app>
+    14. git commit -m "<update_message"
+    15. git push origin master

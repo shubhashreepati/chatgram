@@ -1,0 +1,123 @@
+- in this we will implement sharing location feature
+- to get the location we will be using browser's geolocation api
+- we will be using client side js to latitudes and longitudes and then will share it with server, 
+- who in turn will share other clients
+
+- in index.html we will create a button for send location
+
+- in chat.js we will create an eventListener for click on send location button and then fetch
+- latitudes and longitudes to send to server. 
+
+- in chat.js's function some older browsers do not support navigator.geolocation. so because of that if is used
+- .getCurrentPosition is an asynchronous operation but does not support promises and so we cannot use async await
+- then call back function after it will run and performing some opearations on object as received from api
+
+
+
+Challenge:
+1. client emit "sendLocation" with the object as the data. Object should contain latitude and longitude properties
+2. server should listen for "sendLocation" and send message to all "location: lat, long'
+
+- we will share the link to google maps to clients
+- this is done in index.js in server
+- google maps command is as follows: https://google.com/maps?q=<latitude>,<longitude>
+
+
+
+*********index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg','Welcome!')
+    socket.broadcast.emit('serverMsg','A new user has joined!')
+
+    socket.on('clientMsg',(msg)=>{
+        io.emit('serverMsg',msg)
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg', 'A user has left!')
+    })
+
+    socket.on('sendLocation',(location)=>{
+        io.emit('serverMsg', `https://google.com/maps?q=${location.latitude},${location.longitude}`)
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+*********chat.js
+
+const socket=io()  // io return value stored in socket
+
+socket.on('serverMsg', (msg)=>{
+    console.log('Message received is ', msg)
+})
+
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg)
+})
+
+
+document.querySelector('#send-location').addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        })
+    })
+})
+
+
+
+********index.html
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+        <form id="msgForm" >
+            <input type="text" name="msgInput" >
+            <button >Submit</button>
+        </form>
+        <button id="send-location">Send location</button>
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+        <script src="/js/chat.js"></script>
+    </body>
+</html>

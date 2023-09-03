@@ -1,0 +1,147 @@
+- here we will implement event acknowledgements
+
+1. server(emit) -> client(receive) --acknowledgement-->server
+2. client(emit) -> server(receive) --acknowledgement-->client
+
+- for getting acknowledgement we need to have some changes
+- in chat.js in socket.emit of submit form we need to setup one more arugument as function
+- this function will run when the event is acknowledged 
+- this function is always the last argument, although we can have any number of arguments for sharing data
+- at server side the we will receive 1 callback function and that function is needed to be run at
+- the end when all operations are done 
+- we can also send data through that callback function and on client side(in this case)
+- we can extract that data
+
+functions of acknowledgements
+
+** of chat.js
+    socket.emit('clientMsg',userMsg ,(message)=>{
+        console.log('The message was delievered!', message)
+    })
+
+
+** of index.js
+    socket.on('clientMsg',(msg,callback)=>{
+        io.emit('serverMsg',msg)
+
+        callback('Delievered!')
+    })
+
+
+NOTE: acknowledgements are completely optional 
+      1. callback function is setup by the msg sender(who is hoping for acknowledgement) (this setting is optional)
+      2. callback function received by the msg receiver(who will send acknowledgement that msg is received) (optional)
+
+
+
+- good use case for acknowledgements could be validation
+- if developer does not want to allow profane language, then we can use an npm module
+- that is npm bad-words
+
+- import Filter from bad-words
+- then in socket.on will create Filter instance to check profanity
+- if profanity found we will return by executing feedback
+- in chat.js we refactor to handle the code
+
+
+Challenge:
+1. setup the client acknowledgement function in location sharing
+2. setup the server to send back the acknowledgement
+3. have client print location shared when acknowledged
+
+
+
+****index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+const Filter = require('bad-words')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+
+
+io.on('connection' ,(socket)=>{
+    console.log('New WebSocket connection')
+
+    socket.emit('serverMsg','Welcome!')
+    socket.broadcast.emit('serverMsg','A new user has joined!')
+
+    socket.on('clientMsg',(msg,callback)=>{
+        const filter= new Filter()
+
+        // check for profanity in passed message
+        if(filter.isProfane(msg)){
+            return callback('Profanity is not allowed')
+        }
+
+        io.emit('serverMsg',msg)
+
+        callback()
+    })
+
+    socket.on('disconnect',() =>{
+        io.emit('serverMsg', 'A user has left!')
+    })
+
+    socket.on('sendLocation',(location,callback)=>{
+        io.emit('serverMsg', `https://google.com/maps?q=${location.latitude},${location.longitude}`)
+        callback()
+    })
+
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+*****chat.js
+
+const socket=io()  // io return value stored in socket
+
+socket.on('serverMsg', (msg)=>{
+    console.log('Message received is ', msg)
+})
+
+
+document.querySelector('#msgForm').addEventListener('submit',(e)=>{
+    e.preventDefault()
+
+    const userMsg=e.target.elements.msgInput.value
+
+    socket.emit('clientMsg',userMsg ,(error)=>{
+        if(error){
+           return  console.log(error)
+        }
+
+        console.log('Message Delivered')
+    })
+})
+
+
+document.querySelector('#send-location').addEventListener('click',  ()=>{
+    if(!navigator.geolocation){
+        return alert('Geolocation is not supported by your browser')
+    }
+
+    navigator.geolocation.getCurrentPosition((position)=>{
+        socket.emit('sendLocation',{
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        },()=>{
+            console.log('Location Shared!')
+        })
+    })
+})
+

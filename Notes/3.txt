@@ -1,0 +1,19 @@
+- Websocket Protocol
+- firstly we will have a nodejs application that starts up a server
+- then clients can connect to that server
+
+- Websocket will allow full duplex communication
+- bidirectional communication means client can initiate communication with the server and the 
+- server can initiate communication with the client --> this facility was not available with http requests
+- with http requests it was client job to initiate the request and asking for data from the server
+- and then server will respond
+- so if client does not send request to server, then server won't be able to send anything to client
+
+- in Websocket we have a persistent connection which means clients connect to server and remains 
+- connected as long as it needs to
+
+- so suppose there are four client c1,c2,c3,c4 and one server s 
+- c1 sends message to s 
+- then upon receiving message from c1 , s will send c1's message to c2 c3 c4
+- so here server to client communication is happening
+- so both directions communication is happening. client to server and server to client

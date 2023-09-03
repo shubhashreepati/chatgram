@@ -1,0 +1,75 @@
+- first install socket.io
+- command: npm install socket.io
+
+- we have to somewhat refactor the code 
+- we imported http and created server using http and passed our created app to it 
+- also changed app.listen to server.listen
+- imported socket.io
+
+- actually socketio receives http server as input argument that why we changed the code
+- internally express does this changing to http by default, but we can't extract that and pass to socketio
+- so manually we have to do this
+
+- when using socketio, the socketio also sets up client side file that clients can use
+
+- we are loading a script in index.html which does not exist anywhere,but we can use it as we 
+- have configured our server to work with socket.io
+
+- then our own client side js file is created (in public -> js(folder) -> chat.js)
+- and that will be loaded in index.html and use whatever is provided by the script written recently
+
+- for us to see when connection happen we write a function using io.on in index.js
+
+- in chat.js created we can call io()  which is because of the script we can do
+- io() call is enough to connect to the server as a client
+
+
+
+************index.js
+
+const express = require('express')
+const http = require('http')
+const path =require('path')
+const socketio= require('socket.io')
+
+const app =express()
+const server = http.createServer(app)
+const io = socketio(server)
+
+const port = process.env.PORT || 3000
+const publicDirectoryPath = path.join(__dirname,'../public')
+
+app.use(express.static(publicDirectoryPath))
+
+io.on('connection' ,()=>{
+    console.log('New WebSocket connection')
+})
+
+server.listen(port,()=>{
+    console.log(`Server is up on port ${port}!`)
+})
+
+
+
+****************index.html
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+
+    </head>
+    <body>
+        Chat App
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- this is client side version of the library and when we load this in our client side js code will have access to all stuffs of the library it needs in order to setup communication -->
+        <script src="/js/chat.js"></script>
+    </body>
+</html>
+
+
+
+
+**************chat.js
+
+io()
